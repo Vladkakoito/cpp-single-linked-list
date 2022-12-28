@@ -21,20 +21,28 @@ public:
 
     SingleLinkedList() = default;
 
-    SingleLinkedList(std::initializer_list<Type> values) {
-        if (values.size() > 0) {
+    template<typename It>
+    SingleLinkedList(It begin, size_t size) {
+        if (size > 0) {
             SingleLinkedList tmp;
             auto it_tmp = &tmp.head_;
             Node* next_tmp;
-            
-            for (auto it : values) {
-                next_tmp = new Node(it, nullptr);
+
+            auto it = begin;
+            for(size_t i = 0; i < size; ++i) {
+                next_tmp = new Node(*it, nullptr);
                 it_tmp->next_node = next_tmp;
                 it_tmp = next_tmp;
-                ++tmp.size_;
+                std::advance(it, 1);
             }
+            tmp.size_ = size;
             swap(tmp);
         }
+    }
+
+    SingleLinkedList(std::initializer_list<Type> values) {
+        SingleLinkedList tmp(values.begin(), values.size());
+        swap(tmp);
     }
 
     SingleLinkedList(const SingleLinkedList& other) { 
@@ -42,32 +50,23 @@ public:
         *this = other;
     }
 
+
+// надеюсь, правильно понял ваше замечание. убрал дублирование кода, добавил конструктор
+// из итератора на начало набора данных и размеру, который можно использовать в конструкторе из 
+// std::initializer_list<Type> и в операторе присваивания
     SingleLinkedList& operator=(const SingleLinkedList& rhs) {
         if (&rhs == &*this) {
             return *this;
         }
-        SingleLinkedList tmp;
-        auto it_tmp = &tmp.head_;
-        Node* next_tmp;
-        
-        for (auto it : rhs) {
-            next_tmp = new Node(it, nullptr);
-            it_tmp->next_node = next_tmp;
-            it_tmp = next_tmp;
-            ++tmp.size_;
-        }
+        assert(std::distance(rhs.begin(), rhs.end()) == static_cast<long int> (rhs.GetSize()));
+        SingleLinkedList tmp(rhs.begin(), rhs.size_);
         swap(tmp);
-
         return *this;
     }
 
     void swap(SingleLinkedList& other) noexcept {
-        Node* tmp = head_.next_node;
-        head_.next_node = other.head_.next_node;
-        other.head_.next_node = tmp;
-        size_t size_tmp = size_;
-        size_ = other.size_;
-        other.size_ = size_tmp;
+        std::swap(head_.next_node, other.head_.next_node);
+        std::swap(size_, other.size_);
     }
 
     [[nodiscard]] size_t GetSize() const noexcept {
@@ -75,7 +74,7 @@ public:
     }
 
     [[nodiscard]] bool IsEmpty() const noexcept {
-        return head_.next_node == nullptr;
+        return size_ == 0;
     }
     void PushFront(const Type& value) {
         head_.next_node = new Node(value, head_.next_node);
@@ -85,9 +84,7 @@ public:
 
     void Clear() noexcept {
         while (head_.next_node != nullptr) {
-            Node* buf = head_.next_node;
-            head_.next_node = buf->next_node;
-            delete buf;
+            delete std::exchange(head_.next_node, head_.next_node->next_node);
             --size_;
         }
     }
@@ -120,12 +117,6 @@ public:
         BasicIterator& operator=(const BasicIterator& rhs) = default;
 
         [[nodiscard]] bool operator==(const BasicIterator<const Type>& rhs) const noexcept {
-            if ((node_ == nullptr) && (rhs.node_ == nullptr)) {
-                return true;
-            }
-            if ((node_ == nullptr) || (rhs.node_ == nullptr)) {
-                return false;
-            }
             return &*rhs.node_ == &*node_;
         }
 
@@ -134,12 +125,6 @@ public:
         }
 
         [[nodiscard]] bool operator==(const BasicIterator<Type>& rhs) const noexcept {
-            if ((node_ == nullptr) && (rhs.node_ == nullptr)) {
-                return true;
-            }
-            if ((node_ == nullptr) || (rhs.node_ == nullptr)) {
-                return false;
-            }
             return &*rhs.node_ == &*node_;            
         }
 
@@ -148,13 +133,19 @@ public:
         }
 
         BasicIterator& operator++() noexcept {
+            if (node_ == nullptr) {
+                return *this;
+            }
             node_ = node_->next_node;
             return *this;
         }
 
         BasicIterator operator++(int) noexcept {
-            BasicIterator buf = *this;
-            node_ = node_->next_node;
+            if (node_ == nullptr) {
+                return *this;
+            }
+            BasicIterator buf = *this; 
+            ++node_; 
             return buf;
         }
 
@@ -194,11 +185,7 @@ public:
     }
 
     [[nodiscard]] ConstIterator end() const noexcept {
-        ConstIterator it = begin();
-        while (it.node_ != nullptr) {
-            ++it;
-        }
-        return ConstIterator(it.node_);
+        return ConstIterator(nullptr);
     }
 
     [[nodiscard]] ConstIterator cbegin() const noexcept {
@@ -206,11 +193,7 @@ public:
     }
 
     [[nodiscard]] ConstIterator cend() const noexcept {
-        ConstIterator it = begin();
-        while (it.node_ != nullptr) {
-            ++it;
-        }
-        return ConstIterator(it.node_);
+        return ConstIterator(nullptr);
     }
 
     [[nodiscard]] Iterator before_begin() noexcept {
@@ -226,23 +209,24 @@ public:
     }
 
     Iterator InsertAfter(ConstIterator pos, const Type& value) {
-        Node* tmp = new Node(value, pos.node_->next_node);
-        pos.node_->next_node = tmp;
+        assert(pos.node_ != nullptr);
+        pos.node_->next_node = new Node(value, pos.node_->next_node);
         ++size_;
-        tmp = nullptr;
         return Iterator(pos.node_->next_node);
     }
 
     void PopFront() noexcept {
-        Node* tmp = head_.next_node;
-        head_.next_node = tmp->next_node;
-        delete tmp;
+        if (size_ == 0) {
+            return;
+        }
+        delete std::exchange(head_.next_node, head_.next_node->next_node);
     }
 
     Iterator EraseAfter(ConstIterator pos) noexcept {
-        Node* tmp = pos.node_->next_node;
-        pos.node_->next_node = tmp->next_node;
-        delete tmp;
+        if (pos.node_->next_node == nullptr) {
+            return Iterator(nullptr);
+        }
+        delete std::exchange(pos.node_->next_node, pos.node_->next_node->next_node);
         return Iterator(pos.node_->next_node);
     }
 
@@ -274,7 +258,7 @@ bool operator<(const SingleLinkedList<Type>& lhs, const SingleLinkedList<Type>& 
 
 template <typename Type>
 bool operator<=(const SingleLinkedList<Type>& lhs, const SingleLinkedList<Type>& rhs) {
-    return (lhs < rhs) || (lhs == rhs);
+    return !(rhs < lhs);
 }
 
 template <typename Type>
