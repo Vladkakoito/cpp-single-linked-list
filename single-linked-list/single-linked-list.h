@@ -47,19 +47,16 @@ public:
 
     SingleLinkedList(const SingleLinkedList& other) { 
         assert(size_ == 0 && head_.next_node == nullptr);
-        *this = other;
+        SingleLinkedList tmp(other.begin(), other.size_);
+        swap(tmp);
     }
 
-
-// надеюсь, правильно понял ваше замечание. убрал дублирование кода, добавил конструктор
-// из итератора на начало набора данных и размеру, который можно использовать в конструкторе из 
-// std::initializer_list<Type> и в операторе присваивания
     SingleLinkedList& operator=(const SingleLinkedList& rhs) {
         if (&rhs == &*this) {
             return *this;
         }
         assert(std::distance(rhs.begin(), rhs.end()) == static_cast<long int> (rhs.GetSize()));
-        SingleLinkedList tmp(rhs.begin(), rhs.size_);
+        SingleLinkedList tmp(rhs);
         swap(tmp);
         return *this;
     }
@@ -117,7 +114,7 @@ public:
         BasicIterator& operator=(const BasicIterator& rhs) = default;
 
         [[nodiscard]] bool operator==(const BasicIterator<const Type>& rhs) const noexcept {
-            return &*rhs.node_ == &*node_;
+            return rhs.node_ == node_;
         }
 
         [[nodiscard]] bool operator!=(const BasicIterator<const Type>& rhs) const noexcept {
@@ -125,7 +122,7 @@ public:
         }
 
         [[nodiscard]] bool operator==(const BasicIterator<Type>& rhs) const noexcept {
-            return &*rhs.node_ == &*node_;            
+            return rhs.node_ == node_;            
         }
 
         [[nodiscard]] bool operator!=(const BasicIterator<Type>& rhs) const noexcept {
@@ -133,19 +130,15 @@ public:
         }
 
         BasicIterator& operator++() noexcept {
-            if (node_ == nullptr) {
-                return *this;
-            }
+            assert(node_ != nullptr);
             node_ = node_->next_node;
             return *this;
         }
 
         BasicIterator operator++(int) noexcept {
-            if (node_ == nullptr) {
-                return *this;
-            }
+            assert(node_ != nullptr);
             BasicIterator buf = *this; 
-            ++node_; 
+            ++(*this); 
             return buf;
         }
 
@@ -173,11 +166,7 @@ public:
     }
 
     [[nodiscard]] Iterator end() noexcept {
-        Iterator it = begin();
-        while (it.node_ != nullptr) {
-            ++it;
-        }
-        return Iterator(it.node_);
+        return Iterator(nullptr);
     }
 
     [[nodiscard]] ConstIterator begin() const noexcept {
@@ -216,17 +205,15 @@ public:
     }
 
     void PopFront() noexcept {
-        if (size_ == 0) {
-            return;
-        }
+        assert(size_ != 0);
         delete std::exchange(head_.next_node, head_.next_node->next_node);
+        --size_;
     }
 
     Iterator EraseAfter(ConstIterator pos) noexcept {
-        if (pos.node_->next_node == nullptr) {
-            return Iterator(nullptr);
-        }
+        assert(pos.node_->next_node != nullptr);
         delete std::exchange(pos.node_->next_node, pos.node_->next_node->next_node);
+        --size_;
         return Iterator(pos.node_->next_node);
     }
 
@@ -270,5 +257,4 @@ template <typename Type>
 bool operator>=(const SingleLinkedList<Type>& lhs, const SingleLinkedList<Type>& rhs) {
     return rhs <= lhs;
 } 
-
 
